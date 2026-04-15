@@ -1081,7 +1081,7 @@ public class FlutterSecureStorage {
             Log.i(TAG, "Backup kept intact (_BACKUP keys remain)");
             Log.i(TAG, "=".repeat(60));
 
-            // Return MigrationFailedException to application layer
+            // Return error so the app layer can fall back to FSS 9.2.4
             callback.onError(new MigrationFailedException(
                 "Migration failed and was rolled back. " +
                 "Storage is restored to initial state. " +
@@ -1141,9 +1141,8 @@ public class FlutterSecureStorage {
             Log.w(TAG, "MIGRATION SKIPPED: Previous migration attempt failed");
             Log.w(TAG, "Migration failed flag is set - skipping retry to prevent loops");
             Log.w(TAG, "Original failure reason: " + storedReason);
-            Log.w(TAG, "To retry: Application must clear flag or call deleteAll()");
             Log.w(TAG, separator);
-            
+
             callback.onError(new MigrationFailedException("Migration failed: " + storedReason, exception));
             return; // SKIP MIGRATION
         }
