@@ -1046,7 +1046,12 @@ public class FlutterSecureStorage {
                 Log.w(TAG, "Failed to delete new cipher keys (may not exist): " + keyDeleteError.getMessage());
             }
 
-            // Step 5: Revert algorithm markers to saved (old) algorithms
+            // Step 5: Clean up _MIGRATED markers from configSource
+            Log.i(TAG, "Cleaning up _MIGRATED markers...");
+            MigrationBackup.deleteMigratedMarkers(configSource, config.getSharedPreferencesKeyPrefix());
+            Log.i(TAG, "_MIGRATED markers cleaned up");
+
+            // Step 6: Revert algorithm markers to saved (old) algorithms
             Log.i(TAG, "Reverting algorithm markers to saved (old) algorithms...");
             SharedPreferences.Editor algoEditor = configSource.edit();
             storageCipherFactory.storeSavedAlgorithms(algoEditor);
