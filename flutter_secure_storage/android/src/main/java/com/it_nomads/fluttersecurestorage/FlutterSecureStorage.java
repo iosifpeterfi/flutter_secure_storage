@@ -1045,19 +1045,37 @@ public class FlutterSecureStorage {
             } catch (Exception keyDeleteError) {
                 Log.w(TAG, "Failed to delete new cipher keys (may not exist): " + keyDeleteError.getMessage());
             }
-            
-            // Step 5: Keep backup intact (do not delete)
+
+            // Step 5: Revert algorithm markers to saved (old) algorithms
+            Log.i(TAG, "Reverting algorithm markers to saved (old) algorithms...");
+            SharedPreferences.Editor algoEditor = configSource.edit();
+            storageCipherFactory.storeSavedAlgorithms(algoEditor);
+            algoEditor.commit();
+            Log.i(TAG, "Algorithm markers reverted to old algorithms");
+
+            // Step 6: Reinitialize storageCipher with the saved (old) cipher so reads work
+            Log.i(TAG, "Reinitializing storage cipher with saved algorithm...");
+            try {
+                storageCipher = storageCipherFactory.getSavedStorageCipher(context, null);
+                Log.i(TAG, "Storage cipher reinitialized - reads will work with old algorithm");
+            } catch (Exception cipherError) {
+                Log.e(TAG, "Failed to reinitialize storage cipher: " + cipherError.getMessage());
+            }
+
+            // Step 7: Keep backup intact (do not delete)
             Log.i(TAG, "Keeping backup intact for safety");
-            
-            // Step 6: Set migration failed flag
+
+            // Step 8: Set migration failed flag
             setMigrationFailed(configSource, originalError);
-            
+
             Log.i(TAG, "=".repeat(60));
             Log.i(TAG, "ROLLBACK COMPLETE");
             Log.i(TAG, "Storage restored to initial state");
+            Log.i(TAG, "Algorithm markers reverted to old algorithms");
+            Log.i(TAG, "Storage cipher reinitialized - data is readable");
             Log.i(TAG, "Backup kept intact (_BACKUP keys remain)");
             Log.i(TAG, "=".repeat(60));
-            
+
             // Return MigrationFailedException to application layer
             callback.onError(new MigrationFailedException(
                 "Migration failed and was rolled back. " +
