@@ -1705,17 +1705,26 @@ public class FlutterSecureStorage {
                     }
                 }
 
-                // Step 7: Cleanup
+                // ===== SIMULATED CRASH =====
+                // Crash after ESP migration (step 6) but before cleanup (step 7).
+                // Data is re-encrypted and safe in _BACKUP. On next launch, migration
+                // should detect incomplete state and resume from where it left off.
+                Log.e(TAG, "!!! SIMULATED CRASH after step 6 - backup data still exists, cleanup not done !!!");
+                throw new RuntimeException("SIMULATED CRASH: Migration data re-encrypted but cleanup not completed. " +
+                    "Backup entries and migration markers still present. Next launch should recover gracefully.");
+                // ===== END SIMULATED CRASH =====
+
+                /* COMMENTED OUT DUE TO SIMULATED CRASH ABOVE - Step 7: Cleanup
                 Log.d(TAG, "Step 7/7: Cleaning up - deleting _BACKUP, _MIGRATED markers, updating markers, deleting old keys...");
 
                 // Delete all _BACKUP entries and _MIGRATED markers
                 MigrationBackup.deleteBackup(dataSource, keyStorage, configSource, config,
                                             config.getSharedPreferencesKeyPrefix());
                 MigrationBackup.deleteMigratedMarkers(configSource, config.getSharedPreferencesKeyPrefix());
-    
+
                 // Update algorithm markers to NEW algorithms
                 updateAlgorithmMarkers(configSource);
-    
+
                 // Delete OLD RSA keys from Android KeyStore
                 if (storageCipherFactory.changedKeyAlgorithm()) {
                     try {
@@ -1727,7 +1736,7 @@ public class FlutterSecureStorage {
                         Log.w(TAG, "Failed to delete old key from KeyStore (may not exist)", deleteError);
                     }
                 }
-    
+
                 // Update storageCipher to current
                 storageCipher = currentCipher;
 
@@ -1735,6 +1744,7 @@ public class FlutterSecureStorage {
                 Log.i(TAG, "Migrated " + decryptedCache.size() + " data items with new algorithm.");
 
                 callback.onSuccess(null);
+                END COMMENTED OUT */
 
             } catch (Exception e) {
                 Log.e(TAG, "Non-biometric migration with backup failed", e);
