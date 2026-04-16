@@ -1509,10 +1509,15 @@ public class FlutterSecureStorage {
             if (v instanceof String plainValue && key.contains(config.getSharedPreferencesKeyPrefix())) {
                 byte[] encrypted = cipher.encrypt(plainValue.getBytes(charset));
                 String baseEncoded = Base64.encodeToString(encrypted, 0);
-                target.edit().putString(key, baseEncoded).apply();
+                target.edit().putString(key, baseEncoded).commit();
 
-                // Remove from EncryptedSharedPreferences
-                source.edit().remove(key).apply();
+                // When migrateWithBackup is enabled, KEEP the ESP data as a natural
+                // backup so rollback can restore it if migration crashes.
+                // Cleanup is handled at step 7 of the backup migration flow.
+                if (!config.shouldMigrateWithBackup()) {
+                    // Remove from EncryptedSharedPreferences (no backup protection)
+                    source.edit().remove(key).commit();
+                }
 
                 migratedCount++;
                 Log.d(TAG, "Migrated key: " + key.replaceFirst(config.getSharedPreferencesKeyPrefix() + '_', ""));
