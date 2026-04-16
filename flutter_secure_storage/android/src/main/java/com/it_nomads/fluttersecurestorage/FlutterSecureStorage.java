@@ -969,6 +969,20 @@ public class FlutterSecureStorage {
             // dataSource at step 6 with new cipher). They have no old-cipher equivalent and must
             // be removed so FSS9 fallback doesn't try to decrypt new-cipher data with old cipher.
             Log.i(TAG, "Restoring FSS data from backup (and removing non-backed-up migration artifacts)...");
+
+            // DEBUG: dump dataSource state before rollback
+            Map<String, ?> preRollbackData = dataSource.getAll();
+            Log.i(TAG, "DEBUG: dataSource BEFORE rollback contains " + preRollbackData.size() + " entries total");
+            int dataBackupCount = 0, dataOriginalCount = 0, dataOtherCount = 0;
+            for (String k : preRollbackData.keySet()) {
+                if (k.endsWith("_BACKUP")) dataBackupCount++;
+                else if (k.contains(config.getSharedPreferencesKeyPrefix())) dataOriginalCount++;
+                else dataOtherCount++;
+            }
+            Log.i(TAG, "DEBUG: dataSource breakdown — _BACKUP=" + dataBackupCount
+                    + ", original(prefix match)=" + dataOriginalCount
+                    + ", other=" + dataOtherCount);
+
             int restoredCount = 0;
             int deletedCount = 0;
             SharedPreferences.Editor dataEditor = dataSource.edit();
@@ -980,6 +994,7 @@ public class FlutterSecureStorage {
                     keysWithBackup.add(k.substring(0, k.length() - "_BACKUP".length()));
                 }
             }
+            Log.i(TAG, "DEBUG: keysWithBackup set size = " + keysWithBackup.size());
 
             for (Map.Entry<String, ?> entry : dataSource.getAll().entrySet()) {
                 String key = entry.getKey();
@@ -988,6 +1003,7 @@ public class FlutterSecureStorage {
                     String originalKey = key.substring(0, key.length() - "_BACKUP".length());
                     dataEditor.putString(originalKey, (String) entry.getValue());
                     restoredCount++;
+                    Log.i(TAG, "DEBUG: restoring _BACKUP -> original: " + originalKey.hashCode());
                 } else if (!key.endsWith("_BACKUP")
                         && key.contains(config.getSharedPreferencesKeyPrefix())
                         && !keysWithBackup.contains(key)) {
@@ -995,6 +1011,7 @@ public class FlutterSecureStorage {
                     // Delete it so FSS9 fallback can repopulate from ESP or wherever.
                     dataEditor.remove(key);
                     deletedCount++;
+                    Log.i(TAG, "DEBUG: deleting non-backed-up key: " + key.hashCode());
                 }
             }
 
@@ -1002,6 +1019,18 @@ public class FlutterSecureStorage {
                 throw new Exception("Failed to restore FSS data from backup");
             }
             Log.i(TAG, "Restored " + restoredCount + " FSS entries from backup, deleted " + deletedCount + " non-backed-up migration artifacts");
+
+            // DEBUG: dump dataSource state AFTER rollback
+            Map<String, ?> postRollbackData = dataSource.getAll();
+            int postBackup = 0, postOriginal = 0, postOther = 0;
+            for (String k : postRollbackData.keySet()) {
+                if (k.endsWith("_BACKUP")) postBackup++;
+                else if (k.contains(config.getSharedPreferencesKeyPrefix())) postOriginal++;
+                else postOther++;
+            }
+            Log.i(TAG, "DEBUG: dataSource AFTER rollback — _BACKUP=" + postBackup
+                    + ", original(prefix match)=" + postOriginal
+                    + ", other=" + postOther + ", total=" + postRollbackData.size());
             
             // Step 2: Restore wrapped keys from _BACKUP
             Log.i(TAG, "Restoring wrapped keys from backup...");
@@ -1634,6 +1663,30 @@ public class FlutterSecureStorage {
             try {
                 SharedPreferences keyStorage = context.getSharedPreferences(
                     "FlutterSecureKeyStorage", Context.MODE_PRIVATE);
+
+                // DEBUG: dump pre-migration state so we know where v6.5.2 actually stored data
+                Map<String, ?> preDataEntries = dataSource.getAll();
+                Map<String, ?> preKeyEntries = keyStorage.getAll();
+                int preDataPrefixMatch = 0, preDataBackup = 0;
+                for (String k : preDataEntries.keySet()) {
+                    if (k.endsWith("_BACKUP")) preDataBackup++;
+                    else if (k.contains(config.getSharedPreferencesKeyPrefix())) preDataPrefixMatch++;
+                }
+                Log.i(TAG, "DEBUG: pre-migration dataSource has " + preDataEntries.size() + " entries ("
+                        + preDataPrefixMatch + " match prefix, " + preDataBackup + " _BACKUP)");
+                Log.i(TAG, "DEBUG: pre-migration keyStorage has " + preKeyEntries.size() + " entries");
+                try {
+                    SharedPreferences espCheck = initializeEncryptedSharedPreferencesManager(context);
+                    Map<String, ?> espEntries = espCheck.getAll();
+                    int espPrefixMatch = 0;
+                    for (String k : espEntries.keySet()) {
+                        if (k.contains(config.getSharedPreferencesKeyPrefix())) espPrefixMatch++;
+                    }
+                    Log.i(TAG, "DEBUG: pre-migration ESP has " + espEntries.size() + " entries ("
+                            + espPrefixMatch + " match prefix)");
+                } catch (Exception espErr) {
+                    Log.i(TAG, "DEBUG: pre-migration ESP check failed: " + espErr.getMessage());
+                }
 
                 // Step 1: Create backup - copies data + wrapped keys to _BACKUP, keeps originals.
                 // createBackup() is idempotent: skips internally if status is already "complete".
