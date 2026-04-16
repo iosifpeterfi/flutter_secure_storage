@@ -964,26 +964,44 @@ public class FlutterSecureStorage {
             SharedPreferences keyStorage = context.getSharedPreferences(
                     "FlutterSecureKeyStorage", Context.MODE_PRIVATE);
             
-            // Step 1: Restore FSS data from _BACKUP
-            Log.i(TAG, "Restoring FSS data from backup...");
+            // Step 1: Restore FSS data from _BACKUP, and delete any non-backed-up keys
+            // Non-backed-up keys are those written fresh during migration (e.g. ESP migrated to
+            // dataSource at step 6 with new cipher). They have no old-cipher equivalent and must
+            // be removed so FSS9 fallback doesn't try to decrypt new-cipher data with old cipher.
+            Log.i(TAG, "Restoring FSS data from backup (and removing non-backed-up migration artifacts)...");
             int restoredCount = 0;
+            int deletedCount = 0;
             SharedPreferences.Editor dataEditor = dataSource.edit();
-            
+
+            // Collect all keys that have _BACKUP counterparts
+            java.util.Set<String> keysWithBackup = new java.util.HashSet<>();
+            for (String k : dataSource.getAll().keySet()) {
+                if (k.endsWith("_BACKUP")) {
+                    keysWithBackup.add(k.substring(0, k.length() - "_BACKUP".length()));
+                }
+            }
+
             for (Map.Entry<String, ?> entry : dataSource.getAll().entrySet()) {
                 String key = entry.getKey();
                 if (key.endsWith("_BACKUP") && entry.getValue() instanceof String) {
+                    // Restore _BACKUP value to original key
                     String originalKey = key.substring(0, key.length() - "_BACKUP".length());
-                    String backupValue = (String) entry.getValue();
-                    
-                    dataEditor.putString(originalKey, backupValue);
+                    dataEditor.putString(originalKey, (String) entry.getValue());
                     restoredCount++;
+                } else if (!key.endsWith("_BACKUP")
+                        && key.contains(config.getSharedPreferencesKeyPrefix())
+                        && !keysWithBackup.contains(key)) {
+                    // Key has no _BACKUP counterpart - it was written fresh during migration.
+                    // Delete it so FSS9 fallback can repopulate from ESP or wherever.
+                    dataEditor.remove(key);
+                    deletedCount++;
                 }
             }
-            
+
             if (!dataEditor.commit()) {
                 throw new Exception("Failed to restore FSS data from backup");
             }
-            Log.i(TAG, "Restored " + restoredCount + " FSS entries from backup");
+            Log.i(TAG, "Restored " + restoredCount + " FSS entries from backup, deleted " + deletedCount + " non-backed-up migration artifacts");
             
             // Step 2: Restore wrapped keys from _BACKUP
             Log.i(TAG, "Restoring wrapped keys from backup...");
@@ -1006,6 +1024,12 @@ public class FlutterSecureStorage {
             }
             Log.i(TAG, "Restored " + restoredKeys + " wrapped keys from backup");
             
+            // Step 2.5: Clear ESP_MIGRATED flag so FSS9 fallback can read ESP data again.
+            // ESP data is preserved during backup migration (not deleted at step 6) when
+            // migrateWithBackup=true, so FSS9 can find the original data.
+            Log.i(TAG, "Clearing ENCRYPTED_PREFERENCES_MIGRATED flag...");
+            configSource.edit().remove("ENCRYPTED_PREFERENCES_MIGRATED").commit();
+
             // Step 3: Restore ESP data if it exists
             Boolean isESPMigrated = getEncryptedPrefsMigrated(configSource);
             if (isESPMigrated != null && isESPMigrated) {
