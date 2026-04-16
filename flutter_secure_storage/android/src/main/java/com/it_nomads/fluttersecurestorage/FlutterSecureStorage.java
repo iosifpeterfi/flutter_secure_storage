@@ -1735,6 +1735,18 @@ public class FlutterSecureStorage {
                                                        config.getSharedPreferencesKeyPrefix());
                 }
 
+                // ===== SIMULATED CRASH =====
+                // Crash after step 5 completes but before step 6 (ESP migration) starts.
+                // dataSource has new-cipher ciphertext for all keys; _MIGRATED markers are set;
+                // _BACKUP entries intact; ESP data untouched.
+                // Rollback should restore _BACKUP → originals, clear _MIGRATED markers,
+                // leave ESP alone.
+                Log.e(TAG, "!!! SIMULATED CRASH after step 5 - new-cipher data written, ESP not migrated !!!");
+                throw new RuntimeException("SIMULATED CRASH: step 5 complete but step 6 (ESP) not reached. " +
+                    "Rollback should restore from _BACKUP.");
+                // ===== END SIMULATED CRASH =====
+
+                /* COMMENTED OUT DUE TO SIMULATED CRASH ABOVE - Step 6: Migrate ESP data + Step 7: Cleanup
                 // Step 6: Migrate ESP data if present (after algorithm migration complete)
                 Log.d(TAG, "Step 6/7: Checking for ESP data to migrate...");
 
@@ -1756,16 +1768,7 @@ public class FlutterSecureStorage {
                     }
                 }
 
-                // ===== SIMULATED CRASH =====
-                // Crash after ESP migration (step 6) but before cleanup (step 7).
-                // Data is re-encrypted and safe in _BACKUP. On next launch, migration
-                // should detect incomplete state and resume from where it left off.
-                Log.e(TAG, "!!! SIMULATED CRASH after step 6 - backup data still exists, cleanup not done !!!");
-                throw new RuntimeException("SIMULATED CRASH: Migration data re-encrypted but cleanup not completed. " +
-                    "Backup entries and migration markers still present. Next launch should recover gracefully.");
-                // ===== END SIMULATED CRASH =====
-
-                /* COMMENTED OUT DUE TO SIMULATED CRASH ABOVE - Step 7: Cleanup
+                // Step 7: Cleanup
                 Log.d(TAG, "Step 7/7: Cleaning up - deleting _BACKUP, _MIGRATED markers, updating markers, deleting old keys...");
 
                 // Delete all _BACKUP entries and _MIGRATED markers
@@ -1854,7 +1857,12 @@ public class FlutterSecureStorage {
                         decryptedCache.put(originalKey, plainValue);
                         encryptedCount++;
                     } catch (Exception decryptError) {
-                        Log.e(TAG, "Failed to decrypt _BACKUP key (skipping): " + key, decryptError);
+                        Log.e(TAG, "Failed to decrypt _BACKUP key: " + key, decryptError);
+                        throw new Exception(
+                            "Backup entry corrupted or undecryptable: " + key +
+                            ". Aborting migration to preserve data integrity.",
+                            decryptError
+                        );
                     }
                 }
             }
