@@ -1809,17 +1809,7 @@ public class FlutterSecureStorage {
                     }
                 }
 
-                // ===== SIMULATED CRASH =====
-                // Crash after step 6 (ESP migrated) but before step 7 (cleanup).
-                // dataSource has new-cipher data + ESP migration artifacts;
-                // _BACKUP entries intact; ESP data preserved (migrateWithBackup=true).
-                // Rollback should restore everything and FSS9 should read from ESP.
-                Log.e(TAG, "!!! SIMULATED CRASH after step 6 - ESP migrated, cleanup not done !!!");
-                throw new RuntimeException("SIMULATED CRASH: step 6 complete but step 7 (cleanup) not reached. " +
-                    "Rollback should restore from _BACKUP and preserve ESP.");
-                // ===== END SIMULATED CRASH =====
-
-                /* COMMENTED OUT DUE TO SIMULATED CRASH - Step 7: Cleanup
+                // Step 7: Cleanup
                 Log.d(TAG, "Step 7/7: Cleaning up - deleting _BACKUP, _MIGRATED markers, updating markers, deleting old keys...");
 
                 // Delete all _BACKUP entries and _MIGRATED markers
@@ -1849,7 +1839,6 @@ public class FlutterSecureStorage {
                 Log.i(TAG, "Migrated " + decryptedCache.size() + " data items with new algorithm.");
 
                 callback.onSuccess(null);
-                END COMMENTED OUT */
 
             } catch (Exception e) {
                 Log.e(TAG, "Non-biometric migration with backup failed", e);
