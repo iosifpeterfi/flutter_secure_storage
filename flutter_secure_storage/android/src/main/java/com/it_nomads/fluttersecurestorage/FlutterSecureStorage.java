@@ -1788,6 +1788,12 @@ public class FlutterSecureStorage {
                                                        config.getSharedPreferencesKeyPrefix());
                 }
 
+                // ===== SIMULATED CRASH =====
+                Log.e(TAG, "!!! SIMULATED CRASH after step 5 - before step 6 (ESP migration) !!!");
+                throw new RuntimeException("SIMULATED CRASH: steps 1-5 complete, step 6 (ESP) not reached.");
+                // ===== END SIMULATED CRASH =====
+
+                /* COMMENTED OUT - Step 6 + Step 7
                 // Step 6: Migrate ESP data if present (after algorithm migration complete)
                 Log.d(TAG, "Step 6/7: Checking for ESP data to migrate...");
 
@@ -1809,12 +1815,7 @@ public class FlutterSecureStorage {
                     }
                 }
 
-                // ===== SIMULATED CRASH =====
-                Log.e(TAG, "!!! SIMULATED CRASH after step 6 - before step 7 cleanup !!!");
-                throw new RuntimeException("SIMULATED CRASH: steps 1-6 complete, step 7 (cleanup) not reached.");
-                // ===== END SIMULATED CRASH =====
-
-                /* COMMENTED OUT - Step 7: Cleanup
+                // Step 7: Cleanup
                 Log.d(TAG, "Step 7/7: Cleaning up - deleting _BACKUP, _MIGRATED markers, updating markers, deleting old keys...");
 
                 // Delete all _BACKUP entries and _MIGRATED markers
