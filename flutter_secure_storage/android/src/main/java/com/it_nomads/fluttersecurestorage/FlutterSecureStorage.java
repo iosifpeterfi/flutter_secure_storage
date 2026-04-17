@@ -1688,10 +1688,10 @@ public class FlutterSecureStorage {
                     Log.i(TAG, "DEBUG: pre-migration ESP check failed: " + espErr.getMessage());
                 }
 
-                // Step 1: Create backup - copies data + wrapped keys to _BACKUP, keeps originals.
+                // Step 1/8: Create backup - copies data + wrapped keys to _BACKUP, keeps originals.
                 // createBackup() is idempotent: skips internally if status is already "complete".
                 // On retry after crash, backup is already complete so this is a no-op.
-                Log.d(TAG, "Step 1/7: Creating backup (copy originals to _BACKUP, keep originals)...");
+                Log.d(TAG, "Step 1/8: Creating backup (copy originals to _BACKUP, keep originals)...");
                 if (storageCipherFactory.changedKeyAlgorithm()) {
                     MigrationBackup.createBackup(
                         dataSource,
@@ -1705,19 +1705,17 @@ public class FlutterSecureStorage {
                     Log.i(TAG, "No algorithm change detected, skipping backup");
                 }
 
-                // Step 2: Restore wrapped keys from _BACKUP, then initialize old cipher.
+                // Step 2/8: Restore wrapped keys from _BACKUP, then initialize old cipher.
                 // On first run: originals still exist, restore is a no-op (same value).
-                // On retry after crash at step 3.5 or earlier: originals were deleted, restore brings them back.
-                // IMPORTANT: If _MIGRATED markers exist, step 5 already ran (at least partially) in a prior
+                // On retry after crash at step 4 or earlier: originals were deleted, restore brings them back.
+                // IMPORTANT: If _MIGRATED markers exist, step 6 already ran (at least partially) in a prior
                 // crashed run. The new OAEP-wrapped AES key is already in keyStorage. We still need to
                 // temporarily restore the old _BACKUP key so getSavedStorageCipher can initialize (it reads
                 // from keyStorage using the old RSA key). After savedCipher is initialized, we put the new
-                // key back so step 5's preserved data remains readable with the new cipher.
-                Log.d(TAG, "Step 2/7: Restoring wrapped keys from _BACKUP and initializing saved cipher...");
+                // key back so step 6's preserved data remains readable with the new cipher.
+                Log.d(TAG, "Step 2/8: Restoring wrapped keys from _BACKUP and initializing saved cipher...");
                 boolean alreadyPartiallyMigrated = MigrationBackup.hasMigratedMarkers(
                         configSource, config.getSharedPreferencesKeyPrefix());
-                // If step 5 ran previously, save the current (new) keyStorage entries so we can
-                // restore them after initializing savedCipher from the _BACKUP blobs.
                 Map<String, String> newKeyStorageEntries = new HashMap<>();
                 if (alreadyPartiallyMigrated) {
                     for (Map.Entry<String, ?> entry : keyStorage.getAll().entrySet()) {
@@ -1726,10 +1724,9 @@ public class FlutterSecureStorage {
                             newKeyStorageEntries.put(k, (String) entry.getValue());
                         }
                     }
-                    Log.d(TAG, "Step 2/7: _MIGRATED markers found — saved " + newKeyStorageEntries.size()
+                    Log.d(TAG, "Step 2/8: _MIGRATED markers found — saved " + newKeyStorageEntries.size()
                             + " new key entries; temporarily restoring _BACKUP blobs for savedCipher init");
                 }
-                // Restore _BACKUP key blobs (so savedCipher can unwrap with old RSA key)
                 SharedPreferences.Editor keyRestoreEditor = keyStorage.edit();
                 for (Map.Entry<String, ?> entry : keyStorage.getAll().entrySet()) {
                     String k = entry.getKey();
@@ -1740,32 +1737,28 @@ public class FlutterSecureStorage {
                 }
                 keyRestoreEditor.commit();
                 StorageCipher savedCipher = storageCipherFactory.getSavedStorageCipher(context, null);
-                // After savedCipher init: if step 5 already ran, put the new wrapped key back
-                // so subsequent reads (and step 5 for any remaining keys) use the correct cipher.
                 if (alreadyPartiallyMigrated && !newKeyStorageEntries.isEmpty()) {
                     SharedPreferences.Editor keyRevertEditor = keyStorage.edit();
                     for (Map.Entry<String, String> entry : newKeyStorageEntries.entrySet()) {
                         keyRevertEditor.putString(entry.getKey(), entry.getValue());
                     }
                     keyRevertEditor.commit();
-                    Log.d(TAG, "Step 2/7: New wrapped key restored to keyStorage after savedCipher init");
+                    Log.d(TAG, "Step 2/8: New wrapped key restored to keyStorage after savedCipher init");
                 }
 
-                // Step 3: Decrypt all data FROM _BACKUP keys (in memory only)
+                // Step 3/8: Decrypt all data FROM _BACKUP keys (in memory only)
                 // _BACKUP keys always contain the original old ciphertext, regardless of how many
-                // times migration has been retried. Even if step 5 already re-encrypted the
-                // Step 2 restored the wrapped AES key blob to its original name so savedCipher
-                // is initialized correctly. Data is read from _BACKUP keys (not originals) because
-                // originals may already be re-encrypted with the new cipher from a prior partial run.
-                Log.d(TAG, "Step 3/7: Decrypting all data from _BACKUP keys...");
+                // times migration has been retried. Data is read from _BACKUP keys (not originals)
+                // because originals may already be re-encrypted with the new cipher from a prior partial run.
+                Log.d(TAG, "Step 3/8: Decrypting all data from _BACKUP keys...");
                 Map<String, String> decryptedCache = decryptAllWithSavedCipherFromBackup(dataSource, null, savedCipher);
                 Log.d(TAG, "Successfully decrypted " + decryptedCache.size() + " items from _BACKUP keys");
 
-                // Step 3.5: Delete originals from dataSource and keyStorage.
+                // Step 4/8: Delete originals from dataSource and keyStorage.
                 // Keys already marked _MIGRATED in configSource are preserved — they were
                 // successfully re-encrypted on a prior (crashed) run and must not be deleted,
-                // as step 5 will skip them (they're already in dataSource with new cipher).
-                Log.d(TAG, "Step 3.5/7: Deleting original encrypted entries (preserving already-migrated)...");
+                // as step 6 will skip them (they're already in dataSource with new cipher).
+                Log.d(TAG, "Step 4/8: Deleting original encrypted entries (preserving already-migrated)...");
                 MigrationBackup.deleteOriginalData(dataSource, keyStorage, configSource, config.getSharedPreferencesKeyPrefix());
 
                 if (decryptedCache.isEmpty()) {
@@ -1775,31 +1768,28 @@ public class FlutterSecureStorage {
                 }
 
                 // ===== SIMULATED CRASH =====
-                Log.e(TAG, "!!! SIMULATED CRASH after step 3.5 - before step 4 (new cipher creation) !!!");
-                throw new RuntimeException("SIMULATED CRASH: steps 1-3.5 complete, step 4 not reached. " +
+                Log.e(TAG, "!!! SIMULATED CRASH after step 4 - before step 5 (new cipher creation) !!!");
+                throw new RuntimeException("SIMULATED CRASH: steps 1-4 complete, step 5 not reached. " +
                     "Originals deleted, _BACKUP intact, no new cipher created.");
                 // ===== END SIMULATED CRASH =====
 
-                /* COMMENTED OUT - Steps 4, 5, 6, 7
-                // Step 4: Create new cipher (NEW algorithm)
-                Log.d(TAG, "Step 4/7: Initializing current cipher with new algorithm...");
+                /* COMMENTED OUT - Steps 5 through 8
+                // Step 5/8: Create new cipher (NEW algorithm)
+                Log.d(TAG, "Step 5/8: Initializing current cipher with new algorithm...");
                 StorageCipher currentCipher = storageCipherFactory.getCurrentStorageCipher(context, null);
 
                 if (decryptedCache.isEmpty()) {
-                    Log.i(TAG, "Step 5/7: No data to encrypt, skipping...");
+                    Log.i(TAG, "Step 6/8: No data to encrypt, skipping...");
                 } else {
-                    // Step 5: Encrypt all data with NEW cipher, tracking per-key progress.
-                    // On retry after a crash mid-step-5, keys already marked _MIGRATED are skipped.
-                    Log.d(TAG, "Step 5/7: Encrypting all data with current cipher (per-key tracking)...");
+                    // Step 6/8: Encrypt all data with NEW cipher, tracking per-key progress.
+                    // On retry after a crash mid-step-6, keys already marked _MIGRATED are skipped.
+                    Log.d(TAG, "Step 6/8: Encrypting all data with current cipher (per-key tracking)...");
                     encryptAllWithCurrentCipherTracked(decryptedCache, dataSource, configSource, currentCipher,
                                                        config.getSharedPreferencesKeyPrefix());
                 }
 
-                // Step 6 + Step 7
-                // Step 6: Migrate ESP data if present (after algorithm migration complete)
-                Log.d(TAG, "Step 6/7: Checking for ESP data to migrate...");
-
-                // Check if ESP migration is needed
+                // Step 7/8: Migrate ESP data if present (after algorithm migration complete)
+                Log.d(TAG, "Step 7/8: Checking for ESP data to migrate...");
                 Boolean isESPMigrated = getEncryptedPrefsMigrated(configSource);
                 if (!isESPMigrated) {
                     try {
@@ -1817,18 +1807,12 @@ public class FlutterSecureStorage {
                     }
                 }
 
-                // Step 7: Cleanup
-                Log.d(TAG, "Step 7/7: Cleaning up - deleting _BACKUP, _MIGRATED markers, updating markers, deleting old keys...");
-
-                // Delete all _BACKUP entries and _MIGRATED markers
+                // Step 8/8: Cleanup
+                Log.d(TAG, "Step 8/8: Cleaning up - deleting _BACKUP, _MIGRATED markers, updating markers, deleting old keys...");
                 MigrationBackup.deleteBackup(dataSource, keyStorage, configSource, config,
                                             config.getSharedPreferencesKeyPrefix());
                 MigrationBackup.deleteMigratedMarkers(configSource, config.getSharedPreferencesKeyPrefix());
-
-                // Update algorithm markers to NEW algorithms
                 updateAlgorithmMarkers(configSource);
-
-                // Delete OLD RSA keys from Android KeyStore
                 if (storageCipherFactory.changedKeyAlgorithm()) {
                     try {
                         KeyCipher savedKeyCipher = storageCipherFactory.getSavedKeyCipher(context);
@@ -1839,8 +1823,6 @@ public class FlutterSecureStorage {
                         Log.w(TAG, "Failed to delete old key from KeyStore (may not exist)", deleteError);
                     }
                 }
-
-                // Update storageCipher to current
                 storageCipher = currentCipher;
 
                 Log.i(TAG, "Non-biometric migration WITH BACKUP completed successfully!");
