@@ -1774,6 +1774,13 @@ public class FlutterSecureStorage {
                     Log.i(TAG, "Found " + decryptedCache.size() + " items to migrate");
                 }
 
+                // ===== SIMULATED CRASH =====
+                Log.e(TAG, "!!! SIMULATED CRASH after step 3.5 - before step 4 (new cipher creation) !!!");
+                throw new RuntimeException("SIMULATED CRASH: steps 1-3.5 complete, step 4 not reached. " +
+                    "Originals deleted, _BACKUP intact, no new cipher created.");
+                // ===== END SIMULATED CRASH =====
+
+                /* COMMENTED OUT - Steps 4, 5, 6, 7
                 // Step 4: Create new cipher (NEW algorithm)
                 Log.d(TAG, "Step 4/7: Initializing current cipher with new algorithm...");
                 StorageCipher currentCipher = storageCipherFactory.getCurrentStorageCipher(context, null);
@@ -1788,12 +1795,7 @@ public class FlutterSecureStorage {
                                                        config.getSharedPreferencesKeyPrefix());
                 }
 
-                // ===== SIMULATED CRASH =====
-                Log.e(TAG, "!!! SIMULATED CRASH after step 5 - before step 6 (ESP migration) !!!");
-                throw new RuntimeException("SIMULATED CRASH: steps 1-5 complete, step 6 (ESP) not reached.");
-                // ===== END SIMULATED CRASH =====
-
-                /* COMMENTED OUT - Step 6 + Step 7
+                // Step 6 + Step 7
                 // Step 6: Migrate ESP data if present (after algorithm migration complete)
                 Log.d(TAG, "Step 6/7: Checking for ESP data to migrate...");
 
