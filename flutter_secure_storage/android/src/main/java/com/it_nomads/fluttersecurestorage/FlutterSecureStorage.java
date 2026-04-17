@@ -1754,26 +1754,16 @@ public class FlutterSecureStorage {
                 Map<String, String> decryptedCache = decryptAllWithSavedCipherFromBackup(dataSource, null, savedCipher);
                 Log.d(TAG, "Successfully decrypted " + decryptedCache.size() + " items from _BACKUP keys");
 
-                // Step 4/8: Delete originals from dataSource and keyStorage.
-                // Keys already marked _MIGRATED in configSource are preserved — they were
-                // successfully re-encrypted on a prior (crashed) run and must not be deleted,
-                // as step 6 will skip them (they're already in dataSource with new cipher).
-                Log.d(TAG, "Step 4/8: Deleting original encrypted entries (preserving already-migrated)...");
-                MigrationBackup.deleteOriginalData(dataSource, keyStorage, configSource, config.getSharedPreferencesKeyPrefix());
-
-                if (decryptedCache.isEmpty()) {
-                    Log.i(TAG, "No data found to migrate");
-                } else {
-                    Log.i(TAG, "Found " + decryptedCache.size() + " items to migrate");
-                }
-
                 // ===== SIMULATED CRASH =====
-                Log.e(TAG, "!!! SIMULATED CRASH after step 4 - before step 5 (new cipher creation) !!!");
-                throw new RuntimeException("SIMULATED CRASH: steps 1-4 complete, step 5 not reached. " +
-                    "Originals deleted, _BACKUP intact, no new cipher created.");
+                Log.e(TAG, "!!! SIMULATED CRASH after step 3 - before step 4 (delete originals) !!!");
+                throw new RuntimeException("SIMULATED CRASH: steps 1-3 complete, step 4 not reached. " +
+                    "Originals still intact, _BACKUP exists, decrypted in memory only.");
                 // ===== END SIMULATED CRASH =====
 
-                /* COMMENTED OUT - Steps 5 through 8
+                /* COMMENTED OUT - Steps 4 through 8
+                // Step 4/8: Delete originals from dataSource and keyStorage.
+                Log.d(TAG, "Step 4/8: Deleting original encrypted entries (preserving already-migrated)...");
+                MigrationBackup.deleteOriginalData(dataSource, keyStorage, configSource, config.getSharedPreferencesKeyPrefix());
                 // Step 5/8: Create new cipher (NEW algorithm)
                 Log.d(TAG, "Step 5/8: Initializing current cipher with new algorithm...");
                 StorageCipher currentCipher = storageCipherFactory.getCurrentStorageCipher(context, null);
